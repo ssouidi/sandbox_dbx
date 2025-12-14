@@ -10,6 +10,6 @@ env:
   - name: "SERVING_ENDPOINT_NAME"
     value: "databricks-meta-llama-3-3-70b-instruct"
   - name: "LOCAL_API_TOKEN"
-    valueFrom: "resource:LOCAL_API_TOKEN" 
+    valueFrom: LOCAL_API_TOKEN
   - name: "DATABRICKS_HOST"
     value: "https://adb-2148269122003508.8.azuredatabricks.net/"
