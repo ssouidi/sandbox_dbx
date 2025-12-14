@@ -144,7 +144,7 @@ async def chat(
                     {"role": "user", "content": message.content}
                 ]
             }
-            request_data["databricks_options"] = {"return_trace": True}
+ 
 
             if not supports_streaming:
                 logger.info("Using non-streaming mode")
@@ -354,7 +354,7 @@ async def websocket_chat(
                 ],
                 "stream": True
             }
-            request_data["databricks_options"] = {"return_trace": True}
+        
             
 
             async with streaming_semaphore:
