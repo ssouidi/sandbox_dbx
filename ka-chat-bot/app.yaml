@@ -12,4 +12,4 @@ env:
   - name: "LOCAL_API_TOKEN"
     valueFrom: LOCAL_API_TOKEN
   - name: "DATABRICKS_HOST"
-    value: "adb-2148269122003508.8.azuredatabricks.net/"
+    value: "adb-2148269122003508.8.azuredatabricks.net"
