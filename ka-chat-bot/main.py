@@ -142,9 +142,13 @@ async def chat(
                     *([{"role": msg["role"], "content": msg["content"]} for msg in chat_history[:-1]] 
                         if message.include_history else []),
                     {"role": "user", "content": message.content}
-                ]
+                ],
+                
+                "stream": True 
+            
             }
- 
+            
+          
 
             if not supports_streaming:
                 logger.info("Using non-streaming mode")
@@ -354,7 +358,8 @@ async def websocket_chat(
                 ],
                 "stream": True
             }
-        
+
+
             
 
             async with streaming_semaphore:
