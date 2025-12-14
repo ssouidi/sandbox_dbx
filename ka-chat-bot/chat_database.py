@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from datetime import datetime
 import logging
 from models import MessageResponse, ChatHistoryItem, ChatHistoryResponse
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -382,7 +383,7 @@ class ChatDatabase:
             finally:
                 cursor.close()
 
-    def update_message_rating(self, message_id: str, user_id: str, rating: str | None) -> bool:
+    def update_message_rating(self, message_id: str, user_id: str, rating:Optional[str] ) -> bool:
         with self.db_lock:
             conn = self.get_connection()
             cursor = conn.cursor()
@@ -427,7 +428,7 @@ class ChatDatabase:
             finally:
                 cursor.close()
 
-    def get_message_rating(self, message_id: str, user_id: str) -> str | None:
+    def get_message_rating(self, message_id: str, user_id: str) -> Optional[str]:
         """Get the rating of a message"""
         with self.db_lock:
             conn = self.get_connection()
