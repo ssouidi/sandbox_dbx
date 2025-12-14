@@ -138,7 +138,7 @@ async def chat(
             supports_streaming = await check_endpoint_capabilities(serving_endpoint_name, streaming_support_cache)
             logger.info(f"Endpoint {serving_endpoint_name} supports_streaming: {supports_streaming}")
             request_data = {
-                "input": [
+                "messages": [
                     *([{"role": msg["role"], "content": msg["content"]} for msg in chat_history[:-1]] 
                         if message.include_history else []),
                     {"role": "user", "content": message.content}
@@ -347,7 +347,7 @@ async def websocket_chat(
             
             supports_streaming = await check_endpoint_capabilities(serving_endpoint_name, streaming_support_cache)
             request_data = {
-                "input": [
+                "messages": [
                     *([{"role": msg["role"], "content": msg["content"]} for msg in chat_history[:-1]] 
                         if message_request.include_history else []),
                     {"role": "user", "content": message_request.content}
