@@ -121,36 +121,31 @@ async def chat(
         chat_history = await load_chat_history(message.session_id, user_id, is_first_message, chat_history_cache, chat_db)
         logger.info(f"Loaded {len(chat_history)} messages from chat history")
         
+  
         async def generate():
             logger.info("Starting response generation")
             
             streaming_timeout = httpx.Timeout(
                 connect=8.0,
-                read=300.0,  # increased read timeout for streaming
+                read=120.0,
                 write=8.0,
                 pool=8.0
             )
-
             # Get the serving endpoint name from the request
             serving_endpoint_name = SERVING_ENDPOINT_NAME
             endpoint_url = f"https://{DATABRICKS_HOST}/serving-endpoints/{serving_endpoint_name}/invocations"
             logger.info(f"Using endpoint: {endpoint_url}")
-
-            # Removed databricks_options
-            # request_data["databricks_options"] = {"return_trace": True} ✅ removed
-
-            # Prepare request data with stream=True
+            
+            supports_streaming = await check_endpoint_capabilities(serving_endpoint_name, streaming_support_cache)
+            logger.info(f"Endpoint {serving_endpoint_name} supports_streaming: {supports_streaming}")
             request_data = {
                 "input": [
                     *([{"role": msg["role"], "content": msg["content"]} for msg in chat_history[:-1]] 
                         if message.include_history else []),
                     {"role": "user", "content": message.content}
-                ],
-                "stream": True  # ensures the endpoint returns streaming output
+                ]
             }
-
-            supports_streaming = await check_endpoint_capabilities(serving_endpoint_name, streaming_support_cache)
-            logger.info(f"Endpoint {serving_endpoint_name} supports_streaming: {supports_streaming}")
+            request_data["databricks_options"] = {"return_trace": True}
 
             if not supports_streaming:
                 logger.info("Using non-streaming mode")
@@ -164,69 +159,67 @@ async def chat(
                     logger.info("Acquired streaming semaphore")
                     async with httpx.AsyncClient(timeout=streaming_timeout) as streaming_client:
                         try:
+                            request_data["stream"] = True
                             assistant_message_id = str(uuid.uuid4())
                             logger.info(f"Generated assistant message ID: {assistant_message_id}")
+                            first_token_time = None
                             accumulated_content = ""
+                            ttft = None
                             start_time = time.time()
                             logger.info(f"Starting streaming request at {start_time}")
 
                             logger.info(f"Making streaming POST request to {endpoint_url}")
                             logger.debug(f"Request data: {json.dumps(request_data, indent=2)}")
-
-                            # Send initial connection message for SSE
+                            
+                            # Send initial connection message to establish SSE stream
                             yield f"data: {json.dumps({'type': 'connection', 'message': 'connected'})}\n\n"
-
-                            # Streaming request
+                            
+                            # Make the streaming request directly without heartbeats
                             async with streaming_client.stream(
-                                'POST',
+                                'POST', 
                                 endpoint_url,
                                 headers=headers,
                                 json=request_data,
                                 timeout=streaming_timeout
                             ) as response:
-
-                                if response.status_code != 200:
+                                logger.info(f"Received response with status code: {response.status_code}")
+                                if response.status_code == 200:
+                                    logger.info("Starting to process streaming response")
+                                    logger.info("Calling streaming_handler.handle_streaming_response")
+                                    async for response_chunk in streaming_handler.handle_streaming_response(
+                                        response, request_data, headers, message.session_id, assistant_message_id,
+                                        user_id, user_info, None, start_time, first_token_time,
+                                        accumulated_content, None, ttft, request_handler, message_handler,
+                                        streaming_support_cache, True, False
+                                    ):
+                                        logger.info(f"Main: Got response chunk from streaming handler")
+                                        yield response_chunk
+                                else:
+                                    logger.error(f"Streaming request failed with status code: {response.status_code}")
+                                    logger.error(f"Response headers: {dict(response.headers)}")
                                     response_text = await response.aread()
-                                    logger.error(f"HTTP {response.status_code}: {response_text.decode(errors='ignore')[:1000]}")
-                                    raise Exception("Streaming failed")
-
-                                async for line in response.aiter_lines():
-                                    if line.startswith("data: "):
-                                        json_data = line[6:].strip()
-                                        if json_data == "[DONE]":
-                                            break
-                                        try:
-                                            data = json.loads(json_data)
-                                            # accumulate content and yield partial chunks
-                                            for choice in data.get("choices", []):
-                                                delta = choice.get("delta", {})
-                                                content = delta.get("content")
-                                                if content:
-                                                    accumulated_content += content
-                                                    yield f"data: {json.dumps({'content': content})}\n\n"
-                                        except Exception as e:
-                                            logger.error(f"JSON parse error: {e}")
-
-                            # Send final done event
-                            yield "event: done\ndata: {}\n\n"
-
+                                    logger.error(f"Response body: {response_text.decode('utf-8', errors='ignore')[:1000]}")
+                                    raise Exception(f"Streaming not supported - HTTP {response.status_code}")
                         except (httpx.ReadTimeout, httpx.HTTPError, Exception) as e:
-                            logger.error(f"Streaming failed: {type(e).__name__}: {str(e)}")
-                            logger.info("Falling back to non-streaming mode")
-                            if serving_endpoint_name in streaming_support_cache.get('endpoints', {}):
+                            logger.error(f"Streaming failed with error type: {type(e).__name__}, message: {str(e)}")
+                            logger.error(f"Falling back to non-streaming mode")
+                            if serving_endpoint_name in streaming_support_cache['endpoints']:
+                                logger.info(f"Updating cache to mark endpoint as non-streaming")
                                 streaming_support_cache['endpoints'][serving_endpoint_name].update({
                                     'supports_streaming': False,
                                     'last_checked': datetime.now()
                                 })
-
+                            
                             request_data["stream"] = False
+                            # Add a random query parameter to avoid any caching
                             url = f"{endpoint_url}?nocache={uuid.uuid4()}"
+                            logger.info(f"Making fallback request with fresh connection to {url}")
                             async for response_chunk in streaming_handler.handle_non_streaming_response(
                                 request_handler, url, headers, request_data, message.session_id, user_id, user_info, message_handler
                             ):
                                 yield response_chunk
-                        
-     
+
+
         logger.info("Returning StreamingResponse")
         return StreamingResponse(
             generate(),
