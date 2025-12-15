@@ -364,6 +364,8 @@ async def websocket_chat(
                 async with httpx.AsyncClient(timeout=streaming_timeout) as streaming_client:
                     try:
                         logger.info("Making streaming request to Databricks")
+                        # just before `async with streaming_client.stream(...`
+                        logger.info(f"WebSocket request_data JSON: {json.dumps(request_data)}")
                         async with streaming_client.stream('POST', 
                             endpoint_url,
                             headers=headers,
