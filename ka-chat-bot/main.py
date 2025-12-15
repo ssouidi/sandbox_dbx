@@ -403,12 +403,29 @@ async def websocket_chat(
                                 else:
                                     assistant_content = ""
                                 
-                                # Send a simple message object to the frontend
-                                await websocket.send_json({
-                                    "type": "message",
-                                    "role": "assistant",
-                                    "content": assistant_content,
-                                })
+                                # If we got content, emit synthetic streaming events that
+                                # match what the frontend already understands.
+                                if assistant_content:
+                                    # 1) Simulate a delta event
+                                    await websocket.send_json({
+                                        "type": "response.output_text.delta",
+                                        "item_id": assistant_message_id,
+                                        "delta": assistant_content,
+                                    })
+                                    
+                                    # 2) Simulate a final done event with full content
+                                    await websocket.send_json({
+                                        "type": "response.output_item.done",
+                                        "item": {
+                                            "id": assistant_message_id,
+                                            "content": [
+                                                {
+                                                    "type": "output_text",
+                                                    "text": assistant_content,
+                                                }
+                                            ],
+                                        },
+                                    })
                                 
                                 # Save to database
                                 if assistant_content:
