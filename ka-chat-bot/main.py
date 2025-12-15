@@ -354,7 +354,7 @@ async def websocket_chat(
                         if message_request.include_history else []),
                     {"role": "user", "content": message_request.content}
                 ],
-                "stream": True
+                #"stream": True
             }
 
 
@@ -366,16 +366,23 @@ async def websocket_chat(
                         logger.info("Making streaming request to Databricks")
                         # just before `async with streaming_client.stream(...`
                         logger.info(f"WebSocket request_data JSON: {json.dumps(request_data)}")
+                        # ADD THESE LINES:
+                        logger.info(f"About to call streaming_client.stream()")
+                        
                         async with streaming_client.stream('POST', 
                             endpoint_url,
                             headers=headers,
                             json=request_data,
                             timeout=streaming_timeout
                         ) as response:
+                            # ADD THIS LINE:
+                            logger.info(f"Got response object, status_code: {response.status_code}")
                             
                             if response.status_code != 200:
                                 raise Exception(f"HTTP {response.status_code}: {await response.aread()}")
-                            
+                            # ADD THIS LINE:
+                            logger.info(f"Starting to read response lines")
+  
                             assistant_message_id = str(uuid.uuid4())
                             start_time = time.time()
                             first_token_time = None
